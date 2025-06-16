@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scam Email &amp; IP Detector</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg: #eef2f5;
+      --card-bg: rgba(255,255,255,0.85);
+      --primary: #4a67d6;
+      --text: #1f2a36;
+      --text-muted: #6c757d;
+      --font: 'Inter', sans-serif;
+    }
+    body {
+      margin: 0; padding: 0;
+      background: var(--bg); color: var(--text);
+      font-family: var(--font); min-height: 100vh; display: flex; flex-direction: column;
+    }
+    .navbar {
+      background: var(--card-bg);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    main {
+      flex: 1; overflow-y: auto; padding: 2rem 1rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: none; border-radius: 1rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+    }
+    .btn-analyze {
+      background: var(--primary); color: #fff;
+      border-radius: 50px; padding: .75rem 1.5rem;
+      font-weight: 600; transition: background .2s, transform .1s;
+    }
+    .btn-analyze:hover {
+      background: #3b52b5; transform: translateY(-2px);
+    }
+    .form-control::placeholder { color: var(--text-muted); }
+    .chart-container {
+      position: relative; width: 140px; height: 140px; margin: 0 auto;
+    }
+    .chart-center {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 1.4rem; font-weight: 600; color: var(--text);
+    }
+    footer { text-align: center; padding: 1rem 0; color: var(--text-muted); }
+    @media (max-width: 767px) {
+      .chart-container { width: 120px; height: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg mb-4">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#">
+        <i class="fas fa-shield-alt text-primary me-1"></i> Scam Detector
+      </a>
+    </div>
+  </nav>
+
+  <main class="container-fluid">
+    <!-- Nav pills -->
+    <ul class="nav nav-pills mb-4">
+      <li class="nav-item">
+        <a class="nav-link {% if not ip_risk %}active{% endif %}"
+           data-bs-toggle="pill" href="#analyze">
+          <i class="fas fa-search me-1"></i> Analyze
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if ip_risk %}active{% endif %}"
+           data-bs-toggle="pill" href="#ipcheck">
+          <i class="fas fa-network-wired me-1"></i> IP Check
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" data-bs-toggle="pill" href="#history">
+          <i class="fas fa-history me-1"></i> History
+        </a>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Analyze Tab -->
+      <div class="tab-pane fade {% if not ip_risk %}show active{% endif %}" id="analyze">
+        <div class="row g-4 justify-content-center">
+          <!-- Email Form -->
+          <div class="col-12 col-md-10 col-lg-5">
+            <div class="card p-4">
+              <h4 class="mb-3">
+                <i class="fas fa-envelope-open-text text-primary me-2"></i> Analyze Email
+              </h4>
+              <form method="post">
+                <div class="mb-3">
+                  <label for="sender_email" class="form-label">Sender’s Email</label>
+                  <input type="email" id="sender_email" name="sender_email"
+                         class="form-control" placeholder="alice@example.com"
+                         value="{{ sender_email }}" required>
+                </div>
+                <div class="form-floating mb-4">
+                  <textarea id="email_text" name="email_text"
+                            class="form-control" placeholder="Paste the email here"
+                            style="height:180px">{{ email_text }}</textarea>
+                  <label for="email_text">Email Content</label>
+                </div>
+                <div class="d-grid">
+                  <button type="submit" class="btn-analyze btn btn-lg">
+                    <i class="fas fa-play me-2"></i> Analyze
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Email Result -->
+          {% if risk %}
+          <div class="col-12 col-md-10 col-lg-5">
+            <div class="card p-4">
+              <h4 class="mb-3">
+                <i class="fas fa-chart-pie text-primary me-2"></i> Result
+              </h4>
+              <span class="badge bg-{% if risk=='High Risk' %}danger{% elif risk=='Medium Risk' %}warning{% else %}success{% endif %} py-2 px-3 mb-3">
+                {{ risk }}
+              </span>
+              <p class="mb-1"><strong>Sender:</strong> {{ sender_email }}</p>
+              {% if verified %}
+                <span class="badge bg-success mb-3">Sender Verified</span>
+              {% else %}
+                <span class="badge bg-secondary mb-3">Unverified Sender</span>
+              {% endif %}
+              <div class="chart-container mb-3">
+                <canvas id="probChart"></canvas>
+                <div class="chart-center">{{ probability }}</div>
+              </div>
+              <div class="d-flex gap-2">
+                <button id="saveHistory" class="btn btn-outline-secondary flex-fill">
+                  <i class="fas fa-save me-1"></i> Save Email
+                </button>
+                <button id="copyResult" class="btn btn-outline-success flex-fill">
+                  <i class="fas fa-clipboard me-1"></i> Copy
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- IP Check Tab -->
+      <div class="tab-pane fade {% if ip_risk %}show active{% endif %}" id="ipcheck">
+        <div class="row justify-content-center">
+          <div class="col-12 col-md-6">
+            <div class="card p-4 mb-4">
+              <h4><i class="fas fa-network-wired text-primary me-2"></i> IP Reputation</h4>
+              <form method="post">
+                <div class="mb-3">
+                  <label for="ip_address" class="form-label">IP Address</label>
+                  <input type="text" id="ip_address" name="ip_address"
+                         class="form-control" placeholder="e.g. 8.8.8.8"
+                         value="{{ ip_address }}">
+                </div>
+                <button type="submit" class="btn-analyze btn btn-lg w-100">
+                  <i class="fas fa-search me-2"></i> Check IP
+                </button>
+              </form>
+            </div>
+            {% if ip_risk %}
+            <div class="card p-4 mb-2">
+              <h4><i class="fas fa-info-circle text-primary me-2"></i> IP Result</h4>
+              <span class="badge bg-{% if ip_risk=='High Risk' %}danger{% elif ip_risk=='Medium Risk' %}warning{% else %}success{% endif %} py-2 px-3 mb-3">
+                {{ ip_risk }}
+              </span>
+              <p><strong>List Status:</strong> {{ ip_score }}</p>
+              <div class="d-grid mt-3">
+                <button id="saveIPHistory" class="btn btn-outline-secondary">
+                  <i class="fas fa-save me-1"></i> Save IP
+                </button>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- History Tab -->
+      <div class="tab-pane fade" id="history">
+        <div class="row g-4">
+          <!-- Email History -->
+          <div class="col-12 col-md-6">
+            <div class="card p-4 h-100">
+              <h5><i class="fas fa-envelope-open-text me-2 text-primary"></i> Email History</h5>
+              <div class="table-responsive mt-3">
+                <table class="table table-striped" id="emailHistoryTable">
+                  <thead class="table-light">
+                    <tr><th>Date</th><th>Sender</th><th>Risk</th><th>Prob</th></tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end gap-2 mt-2">
+                <button id="downloadEmailCsv" class="btn btn-outline-primary btn-sm">
+                  <i class="fas fa-download me-1"></i> Export CSV
+                </button>
+                <button id="clearEmailHistory" class="btn btn-outline-danger btn-sm">
+                  <i class="fas fa-trash me-1"></i> Clear
+                </button>
+              </div>
+            </div>
+          </div>
+          <!-- IP History -->
+          <div class="col-12 col-md-6">
+            <div class="card p-4 h-100">
+              <h5><i class="fas fa-network-wired me-2 text-primary"></i> IP History</h5>
+              <div class="table-responsive mt-3">
+                <table class="table table-striped" id="ipHistoryTable">
+                  <thead class="table-light">
+                    <tr><th>Date</th><th>IP</th><th>Risk</th><th>Status</th></tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div class="d-flex justify-content-end gap-2 mt-2">
+                <button id="downloadIpCsv" class="btn btn-outline-primary btn-sm">
+                  <i class="fas fa-download me-1"></i> Export CSV
+                </button>
+                <button id="clearIpHistory" class="btn btn-outline-danger btn-sm">
+                  <i class="fas fa-trash me-1"></i> Clear
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer>&copy; 2025 Scam Email Detector</footer>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Render email probability chart
+    {% if risk %}
+    (function(){
+      const raw = "{{ probability }}".replace('%',''),
+            p   = parseFloat(raw);
+      new Chart(document.getElementById('probChart'), {
+        type:'doughnut',
+        data:{datasets:[{data:[p,100-p],backgroundColor:['#dc3545','#e9ecef']}]},
+        options:{cutout:'75%',plugins:{tooltip:{enabled:false},legend:{display:false}}}
+      });
+    })();
+    {% endif %}
+
+    // History rendering functions
+    function renderEmailHistory(){
+      const tb = document.querySelector('#emailHistoryTable tbody');
+      tb.innerHTML = '';
+      JSON.parse(localStorage.getItem('scanHistory')||'[]')
+        .forEach(it=>{
+          const tr=document.createElement('tr');
+          tr.innerHTML=`
+            <td>${it.date}</td>
+            <td>${it.sender}</td>
+            <td><span class="badge bg-${it.riskBadge}">${it.risk}</span></td>
+            <td>${it.prob}</td>`;
+          tb.appendChild(tr);
+        });
+    }
+    function renderIpHistory(){
+      const tb = document.querySelector('#ipHistoryTable tbody');
+      tb.innerHTML = '';
+      JSON.parse(localStorage.getItem('ipHistory')||'[]')
+        .forEach(it=>{
+          const tr=document.createElement('tr');
+          tr.innerHTML=`
+            <td>${it.date}</td>
+            <td>${it.ip}</td>
+            <td><span class="badge bg-${it.riskBadge}">${it.risk}</span></td>
+            <td>${it.status}</td>`;
+          tb.appendChild(tr);
+        });
+    }
+    renderEmailHistory();
+    renderIpHistory();
+
+    // Prepare current entries
+    const currentEmail = {
+      date:new Date().toLocaleString(),
+      sender:'{{ sender_email|default("") }}',
+      risk:'{{ risk or "" }}',
+      prob:'{{ probability or "" }}'
+    };
+    currentEmail.riskBadge = currentEmail.risk==='High Risk'?'danger'
+      : currentEmail.risk==='Medium Risk'?'warning':'success';
+
+    const currentIp = {
+      date:new Date().toLocaleString(),
+      ip:'{{ ip_address|default("") }}',
+      risk:'{{ ip_risk or "" }}',
+      status:'{{ ip_score or "" }}'
+    };
+    currentIp.riskBadge = currentIp.risk==='High Risk'?'danger'
+      : currentIp.risk==='Medium Risk'?'warning':'success';
+
+    // Save buttons
+    document.getElementById('saveHistory')?.addEventListener('click',()=>{
+      if(!currentEmail.risk) return;
+      const arr = JSON.parse(localStorage.getItem('scanHistory')||'[]');
+      arr.push(currentEmail);
+      localStorage.setItem('scanHistory',JSON.stringify(arr));
+      renderEmailHistory();
+    });
+    document.getElementById('saveIPHistory')?.addEventListener('click',()=>{
+      if(!currentIp.risk) return;
+      const arr = JSON.parse(localStorage.getItem('ipHistory')||'[]');
+      arr.push(currentIp);
+      localStorage.setItem('ipHistory',JSON.stringify(arr));
+      renderIpHistory();
+    });
+
+    // Export & clear email history
+    document.getElementById('downloadEmailCsv')?.addEventListener('click',()=>{
+      const arr = JSON.parse(localStorage.getItem('scanHistory')||'[]');
+      if(!arr.length) return;
+      let csv = 'Date,Sender,Risk,Prob\n' + arr.map(d=>`"${d.date}","${d.sender}","${d.risk}","${d.prob}"`).join('\n');
+      const blob = new Blob([csv],{type:'text/csv'}), url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='email_history.csv'; a.click();
+      URL.revokeObjectURL(url);
+    });
+    document.getElementById('clearEmailHistory')?.addEventListener('click',()=>{
+      localStorage.removeItem('scanHistory'); renderEmailHistory();
+    });
+
+    // Export & clear IP history
+    document.getElementById('downloadIpCsv')?.addEventListener('click',()=>{
+      const arr = JSON.parse(localStorage.getItem('ipHistory')||'[]');
+      if(!arr.length) return;
+      let csv = 'Date,IP,Risk,Status\n' + arr.map(d=>`"${d.date}","${d.ip}","${d.risk}","${d.status}"`).join('\n');
+      const blob = new Blob([csv],{type:'text/csv'}), url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='ip_history.csv'; a.click();
+      URL.revokeObjectURL(url);
+    });
+    document.getElementById('clearIpHistory')?.addEventListener('click',()=>{
+      localStorage.removeItem('ipHistory'); renderIpHistory();
+    });
+  </script>
+</body>
+</html>

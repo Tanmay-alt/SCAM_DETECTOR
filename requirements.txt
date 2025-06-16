@@ -1,0 +1,5 @@
+Flask
+dnspython
+joblib
+scikit-learn
+pandas
