@@ -24,7 +24,6 @@
     .badge-low { background-color: #28a745; }
     .chart-container { position: relative; width: 120px; height: 120px; margin: 0 auto; }
     .chart-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.25rem; font-weight: 600; }
-    .prob-chart { width: 40px; height: 40px; }
     footer { text-align: center; padding: 1rem 0; font-size: .875rem; color: #6c757d; }
   </style>
 </head>
@@ -40,22 +39,26 @@
   <main class="container my-5">
     <ul class="nav nav-pills justify-content-center mb-4">
       <li class="nav-item">
-        <button class="nav-link {% if check_type=='email' or (not ip_risk and not site_risk and not check_type) %}active{% endif %}" data-bs-target="#analyze" data-bs-toggle="pill">
+        <button class="nav-link {% if check_type=='email' or (not ip_risk and not site_risk and not check_type) %}active{% endif %}"
+                data-bs-target="#analyze" data-bs-toggle="pill">
           <i class="fas fa-envelope-open-text me-1"></i>Email
         </button>
       </li>
       <li class="nav-item">
-        <button class="nav-link {% if check_type=='ip' or ip_risk %}active{% endif %}" data-bs-target="#ipcheck" data-bs-toggle="pill">
+        <button class="nav-link {% if check_type=='ip' or ip_risk %}active{% endif %}"
+                data-bs-target="#ipcheck" data-bs-toggle="pill">
           <i class="fas fa-network-wired me-1"></i>IP
         </button>
       </li>
       <li class="nav-item">
-        <button class="nav-link {% if check_type=='site' or site_risk %}active{% endif %}" data-bs-target="#sitecheck" data-bs-toggle="pill">
+        <button class="nav-link {% if check_type=='site' or site_risk %}active{% endif %}"
+                data-bs-target="#sitecheck" data-bs-toggle="pill">
           <i class="fas fa-globe me-1"></i>Website
         </button>
       </li>
       <li class="nav-item">
-        <button class="nav-link {% if active_tab=='history' %}active{% endif %}" data-bs-target="#history" data-bs-toggle="pill">
+        <button class="nav-link {% if active_tab=='history' %}active{% endif %}"
+                data-bs-target="#history" data-bs-toggle="pill">
           <i class="fas fa-history me-1"></i>History
         </button>
       </li>
@@ -63,7 +66,8 @@
 
     <div class="tab-content">
       <!-- Email Analyze -->
-      <div class="tab-pane fade {% if check_type=='email' or (not ip_risk and not site_risk and not check_type) %}show active{% endif %}" id="analyze">
+      <div class="tab-pane fade {% if check_type=='email' or (not ip_risk and not site_risk and not check_type) %}show active{% endif %}"
+           id="analyze">
         <div class="row justify-content-center g-4">
           <div class="col-md-6 col-lg-5">
             <div class="card p-4">
@@ -72,31 +76,75 @@
                 <input type="hidden" name="check_type" value="email">
                 <div class="mb-3">
                   <label for="sender_email" class="form-label">Sender’s Email</label>
-                  <input type="email" id="sender_email" name="sender_email" class="form-control" placeholder="alice@example.com" value="{{ sender_email }}" required>
+                  <input type="email" id="sender_email" name="sender_email"
+                         class="form-control" placeholder="alice@example.com"
+                         value="{{ sender_email }}" required>
                 </div>
                 <div class="mb-3 form-floating">
-                  <textarea id="email_text" name="email_text" class="form-control" placeholder="Paste the email here" style="height:160px" required>{{ email_text }}</textarea>
+                  <textarea id="email_text" name="email_text" class="form-control"
+                            placeholder="Paste the email here" style="height:160px"
+                            required>{{ email_text }}</textarea>
                   <label for="email_text">Email Content</label>
                 </div>
                 <div class="d-grid">
-                  <button type="submit" class="btn btn-primary"><i class="fas fa-play me-2"></i>Analyze</button>
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-play me-2"></i>Analyze
+                  </button>
                 </div>
               </form>
             </div>
           </div>
+
           {% if risk %}
           <div class="col-md-6 col-lg-5">
             <div class="card p-4">
               <h5 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Result</h5>
-              <span class="badge {% if risk=='High Risk' %}badge-high{% elif risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %} mb-3 py-2 px-3">{{ risk }}</span>
+              <span class="badge {% if risk=='High Risk' %}badge-high{% elif risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %} mb-3 py-2 px-3">
+                {{ risk }}
+              </span>
               <p class="mb-1"><strong>Sender:</strong> {{ sender_email }}</p>
-              <p class="mb-3">{% if verified %}<span class="badge badge-low">Sender Verified</span>{% else %}<span class="badge bg-secondary">Unverified Sender</span>{% endif %}</p>
+              <p class="mb-3">
+                {% if verified %}
+                  <span class="badge badge-low">Sender Verified</span>
+                {% else %}
+                  <span class="badge bg-secondary">Unverified Sender</span>
+                {% endif %}
+              </p>
               <div class="chart-container mb-3">
                 <canvas id="probChart"></canvas>
                 <div class="chart-center">{{ probability }}</div>
               </div>
-              <div class="d-grid">
-                <button id="saveEmailHistory" class="btn btn-outline-secondary"><i class="fas fa-save me-1"></i>Save Email</button>
+
+              <!-- Link Safety Section -->
+              {% if link_results %}
+                <div class="mb-3">
+                  <h6>Link Safety</h6>
+                  <ul class="list-unstyled">
+                    {% for lr in link_results %}
+                      <li class="mb-1">
+                        <a href="{{ lr.url }}" target="_blank">{{ lr.url }}</a>
+                        <span class="badge {% if lr.risk=='High Risk' %}badge-high{% elif lr.risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %} ms-2">
+                          {{ lr.risk }}
+                        </span>
+                        <small class="text-muted ms-1">({{ lr.prob }})</small>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+
+              <!-- Why flagged -->
+              {% if synopsis %}
+                <div class="alert alert-warning mt-3" style="white-space: pre-wrap;">
+                  <strong>Why flagged:</strong><br>
+                  {{ synopsis }}
+                </div>
+              {% endif %}
+
+              <div class="d-grid mt-3">
+                <button id="saveEmailHistory" class="btn btn-outline-secondary">
+                  <i class="fas fa-save me-1"></i>Save Email
+                </button>
               </div>
             </div>
           </div>
@@ -105,7 +153,8 @@
       </div>
 
       <!-- IP Check -->
-      <div class="tab-pane fade {% if check_type=='ip' or ip_risk %}show active{% endif %}" id="ipcheck">
+      <div class="tab-pane fade {% if check_type=='ip' or ip_risk %}show active{% endif %}"
+           id="ipcheck">
         <div class="row justify-content-center g-4">
           <div class="col-md-6 col-lg-5">
             <div class="card p-4">
@@ -114,19 +163,36 @@
                 <input type="hidden" name="check_type" value="ip">
                 <div class="mb-3">
                   <label for="ip_address" class="form-label">IP Address</label>
-                  <input type="text" id="ip_address" name="ip_address" class="form-control" placeholder="8.8.8.8" value="{{ ip_address }}" required>
+                  <input type="text" id="ip_address" name="ip_address"
+                         class="form-control" placeholder="8.8.8.8"
+                         value="{{ ip_address }}" required>
                 </div>
                 <div class="d-grid">
-                  <button type="submit" class="btn btn-primary"><i class="fas fa-search me-2"></i>Check IP</button>
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-2"></i>Check IP
+                  </button>
                 </div>
               </form>
             </div>
+
             {% if ip_risk %}
             <div class="card p-4 mt-4">
-              <h5 class="mb-3"><i class="fas fa-info-circle me-2"></i>Result</n            <span class="badge {% if ip_risk=='High Risk' %}badge-high{% elif ip_risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %} mb-3 py-2 px-3">{{ ip_risk }}</span>
-              <p class="mb-1"><strong>List Status:</strong> {{ ip_score }}</p>
+              <h5 class="mb-3"><i class="fas fa-info-circle me-2"></i>Result</h5>
+              <span class="badge
+                {% if ip_risk=='High Risk' %}badge-high
+                {% elif ip_risk=='Medium Risk' %}badge-medium
+                {% else %}badge-low{% endif %} mb-3 py-2 px-3">
+                {{ ip_risk }}
+              </span>
+              <div class="chart-container mb-3">
+                <canvas id="ipProbChart"></canvas>
+                <div class="chart-center">{{ ip_score }}</div>
+              </div>
+              <p class="mb-1"><strong>List Status:</strong> {{ ip_list_status }}</p>
               <div class="d-grid">
-                <button id="saveIPHistory" class="btn btn-outline-secondary"><i class="fas fa-save me-1"></i>Save IP</button>
+                <button id="saveIPHistory" class="btn btn-outline-secondary">
+                  <i class="fas fa-save me-1"></i>Save IP
+                </button>
               </div>
             </div>
             {% endif %}
@@ -135,7 +201,8 @@
       </div>
 
       <!-- Website Check -->
-      <div class="tab-pane fade {% if check_type=='site' or site_risk %}show active{% endif %}" id="sitecheck">
+      <div class="tab-pane fade {% if check_type=='site' or site_risk %}show active{% endif %}"
+           id="sitecheck">
         <div class="row justify-content-center g-4">
           <div class="col-md-6 col-lg-5">
             <div class="card p-4">
@@ -144,24 +211,34 @@
                 <input type="hidden" name="check_type" value="site">
                 <div class="mb-3">
                   <label for="site_url" class="form-label">Website URL</label>
-                  <input type="url" id="site_url" name="site_url" class="form-control" placeholder="https://example.com" value="{{ site_url }}" required>
+                  <input type="url" id="site_url" name="site_url"
+                         class="form-control"
+                         placeholder="https://example.com"
+                         value="{{ site_url }}" required>
                 </div>
                 <div class="d-grid">
-                  <button type="submit" class="btn btn-primary"><i class="fas fa-search me-2"></i>Check Website</button>
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-2"></i>Check Website
+                  </button>
                 </div>
               </form>
             </div>
+
             {% if site_risk %}
             <div class="card p-4 mt-4">
               <h5 class="mb-3"><i class="fas fa-info-circle me-2"></i>Result</h5>
-              <span class="badge {% if site_risk=='High Risk' %}badge-high{% elif site_risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %} mb-3 py-2 px-3">{{ site_risk }}</span>
+              <span class="badge {% if site_risk=='High Risk' %}badge-high{% elif site_risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %} mb-3 py-2 px-3">
+                {{ site_risk }}
+              </span>
               <p class="mb-1"><strong>URL:</strong> {{ site_url }}</p>
               <div class="chart-container mb-3">
                 <canvas id="siteProbChart"></canvas>
                 <div class="chart-center">{{ site_probability }}</div>
               </div>
               <div class="d-grid">
-                <button id="saveSiteHistory" class="btn btn-outline-secondary"><i class="fas fa-save me-1"></i>Save Site</button>
+                <button id="saveSiteHistory" class="btn btn-outline-secondary">
+                  <i class="fas fa-save me-1"></i>Save Site
+                </button>
               </div>
             </div>
             {% endif %}
@@ -200,7 +277,7 @@
               </div>
               <div class="d-flex justify-content-end gap-2">
                 <button id="downloadIpCsv" class="btn btn-sm btn-outline-primary">Export CSV</button>
-                <button id="clearIpHistory" class="btn btn-sm btn-outlinedanger">Clear</button>
+                <button id="clearIpHistory" class="btn btn-sm btn-outline-danger">Clear</button>
               </div>
             </div>
           </div>
@@ -231,33 +308,55 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      // Render Email Chart
+      // --- Email Chart ---
       {% if probability %}
-      const emailPct = parseFloat('{{ probability.replace('%','') }}');
+      const emailPct = parseFloat('{{ probability.replace("%","") }}');
       new Chart(document.getElementById('probChart'), {
-        type: 'doughnut', data: { datasets: [{ data: [emailPct, 100-emailPct] }] },
-        options: { cutout: '75%', plugins: { tooltip: { enabled: false }, legend: { display: false } } }
-      });
-      {% endif %}
-      // Render Site Chart
-      {% if site_probability %}
-      const sitePct = parseFloat('{{ site_probability.replace('%','') }}');
-      new Chart(document.getElementById('siteProbChart'), {
-        type: 'doughnut', data: { datasets: [{ data: [sitePct, 100-sitePct] }] },
-        options: { cutout: '75%', plugins: { tooltip: { enabled: false }, legend: { display: false } } }
+        type: 'doughnut',
+        data: { datasets: [{ data: [emailPct, 100-emailPct] }] },
+        options: {
+          cutout: '75%',
+          plugins: { tooltip: { enabled: false }, legend: { display: false } }
+        }
       });
       {% endif %}
 
-      // History rendering functions
+      // --- Site Chart ---
+      {% if site_probability %}
+      const sitePct = parseFloat('{{ site_probability.replace("%","") }}');
+      new Chart(document.getElementById('siteProbChart'), {
+        type: 'doughnut',
+        data: { datasets: [{ data: [sitePct, 100-sitePct] }] },
+        options: {
+          cutout: '75%',
+          plugins: { tooltip: { enabled: false }, legend: { display: false } }
+        }
+      });
+      {% endif %}
+
+      // --- IP Chart ---
+      {% if ip_score %}
+      const ipPct = parseFloat('{{ ip_score.replace("%","") }}');
+      new Chart(document.getElementById('ipProbChart'), {
+        type: 'doughnut',
+        data: { datasets: [{ data: [ipPct, 100-ipPct] }] },
+        options: {
+          cutout: '75%',
+          plugins: { tooltip: { enabled: false }, legend: { display: false } }
+        }
+      });
+      {% endif %}
+
+      // --- History Rendering ---
       function renderHistory(key, tableId) {
         const data = JSON.parse(localStorage.getItem(key)||'[]');
         const tbody = document.querySelector(`#${tableId} tbody`);
         tbody.innerHTML = '';
         data.forEach(it => {
           const tr = document.createElement('tr');
-          if (it.risk.includes('High')) tr.classList.add('table-danger');
+          if (it.risk.includes('High'))        tr.classList.add('table-danger');
           else if (it.risk.includes('Medium')) tr.classList.add('table-warning');
-          else tr.classList.add('table-success');
+          else                                 tr.classList.add('table-success');
           Object.values(it).forEach(val => {
             const td = document.createElement('td');
             td.textContent = val;
@@ -270,36 +369,60 @@
       renderHistory('ipHistory','ipHistoryTable');
       renderHistory('siteHistory','siteHistoryTable');
 
-      // Save handlers
+      // --- Save Handlers ---
       document.getElementById('saveEmailHistory')?.addEventListener('click', () => {
         const arr = JSON.parse(localStorage.getItem('emailHistory')||'[]');
-        arr.push({ date: new Date().toLocaleString(), sender: '{{ sender_email|default("") }}', risk: '{{ risk|default("") }}', prob: '{{ probability|default("") }}' });
+        arr.push({
+          date:   new Date().toLocaleString(),
+          sender: '{{ sender_email|default("") }}',
+          risk:   '{{ risk|default("") }}',
+          prob:   '{{ probability|default("") }}'
+        });
         localStorage.setItem('emailHistory', JSON.stringify(arr));
         renderHistory('emailHistory','emailHistoryTable');
       });
+
       document.getElementById('saveIPHistory')?.addEventListener('click', () => {
         const arr = JSON.parse(localStorage.getItem('ipHistory')||'[]');
-        arr.push({ date: new Date().toLocaleString(), ip: '{{ ip_address|default("") }}', risk: '{{ ip_risk|default("") }}', status: '{{ ip_score|default("") }}', prob: '{{ site_probability|default("") }}' });
+        arr.push({
+          date:   new Date().toLocaleString(),
+          ip:     '{{ ip_address|default("") }}',
+          risk:   '{{ ip_risk|default("") }}',
+          status: '{{ ip_list_status|default("") }}',
+          prob:   '{{ ip_score|default("") }}'
+        });
         localStorage.setItem('ipHistory', JSON.stringify(arr));
         renderHistory('ipHistory','ipHistoryTable');
       });
+
       document.getElementById('saveSiteHistory')?.addEventListener('click', () => {
         const arr = JSON.parse(localStorage.getItem('siteHistory')||'[]');
-        arr.push({ date: new Date().toLocaleString(), url: '{{ site_url|default("") }}', risk: '{{ site_risk|default("") }}', prob: '{{ site_probability|default("") }}' });
+        arr.push({
+          date: new Date().toLocaleString(),
+          url:  '{{ site_url|default("") }}',
+          risk: '{{ site_risk|default("") }}',
+          prob: '{{ site_probability|default("") }}'
+        });
         localStorage.setItem('siteHistory', JSON.stringify(arr));
         renderHistory('siteHistory','siteHistoryTable');
       });
 
-      // Export & Clear buttons
-      [[ 'downloadEmailCsv','emailHistory'], ['downloadIpCsv','ipHistory'], ['downloadSiteCsv','siteHistory']].forEach(([btnId, key]) => {
+      // --- Export & Clear Buttons ---
+      [['downloadEmailCsv','emailHistory'], ['downloadIpCsv','ipHistory'], ['downloadSiteCsv','siteHistory']].forEach(([btnId, key]) => {
         document.getElementById(btnId)?.addEventListener('click', () => {
-          const d = JSON.parse(localStorage.getItem(key)||'[]'); if (!d.length) return;
+          const d = JSON.parse(localStorage.getItem(key)||'[]');
+          if (!d.length) return;
           const hdr = Object.keys(d[0]).join(',');
           const csv = hdr + '\n' + d.map(r => Object.values(r).map(v => `"${v}"`).join(',')).join('\n');
           const blob = new Blob([csv],{type:'text/csv'}), url = URL.createObjectURL(blob);
-          const a = document.createElement('a'); a.href=url; a.download=key+'.csv'; a.click(); URL.revokeObjectURL(url);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = key + '.csv';
+          a.click();
+          URL.revokeObjectURL(url);
         });
       });
+
       [['clearEmailHistory','emailHistoryTable'], ['clearIpHistory','ipHistoryTable'], ['clearSiteHistory','siteHistoryTable']].forEach(([btnId, tblId]) => {
         document.getElementById(btnId)?.addEventListener('click', () => {
           const key = btnId.includes('Email') ? 'emailHistory' : btnId.includes('Ip') ? 'ipHistory' : 'siteHistory';
