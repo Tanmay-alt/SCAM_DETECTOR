@@ -1,0 +1,74 @@
+:root {
+  --primary-color: #4A67D6;
+  --primary-hover: #3B52B5;
+  --high-risk-bg: #FEE2E2;
+  --high-risk-text: #DC2626;
+  --medium-risk-bg: #FEF3C7;
+  --medium-risk-text: #D97706;
+  --low-risk-bg: #D1FAE5;
+  --low-risk-text: #059669;
+  --verified-bg: var(--low-risk-bg);
+  --verified-text: var(--low-risk-text);
+  --unverified-bg: #E5E7EB;
+  --unverified-text: #4B5563;
+  --bg-white: #ffffff;
+  --text-dark: #1F2937;
+  --text-muted: #6B7280;
+  --border-color: #E5E7EB;
+}
+
+body.body-bg {
+    background-color: #f4f6f8;
+    background-image: radial-gradient(circle, rgba(0,0,0,0.02) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--text-dark);
+  line-height: 1.6;
+}
+
+.navbar {
+  background-color: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.navbar-brand { font-weight: 700; color: var(--primary-color) !important; }
+.main-container { max-width: 1100px; }
+.card { background: var(--bg-white); border: 1px solid var(--border-color); border-radius: .75rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.04); }
+.card h5 { font-weight: 600; }
+.btn-primary { background-color: var(--primary-color); border: none; font-weight: 600; padding: .8rem 1.5rem; border-radius: 50px; transition: background-color .2s, box-shadow .2s, transform .2s; }
+.btn-primary:hover { background-color: var(--primary-hover); box-shadow: 0 4px 15px rgba(74, 103, 214, 0.3); transform: translateY(-2px); }
+.form-control { border-radius: .5rem; border-color: var(--border-color); }
+.form-control:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(74, 103, 214, 0.15); }
+.nav-pills .nav-link { color: var(--text-muted); font-weight: 600; border-radius: 50px; }
+.nav-pills .nav-link.active, .nav-pills .show>.nav-link { background-color: var(--primary-color); color: var(--bg-white); }
+.risk-badge { font-weight: 600; padding: .5rem 1rem; border-radius: 50px; display: inline-block; }
+.risk-badge.high { background-color: var(--high-risk-bg); color: var(--high-risk-text); }
+.risk-badge.medium { background-color: var(--medium-risk-bg); color: var(--medium-risk-text); }
+.risk-badge.low { background-color: var(--low-risk-bg); color: var(--low-risk-text); }
+.status-badge { font-weight: 500; padding: .25rem .6rem; border-radius: 6px; font-size: .8em; }
+.status-badge.verified { background-color: var(--verified-bg); color: var(--verified-text); }
+.status-badge.unverified { background-color: var(--unverified-bg); color: var(--unverified-text); }
+.chart-container { position: relative; width: 140px; height: 140px; margin: 1rem auto; }
+.chart-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+.chart-center .score { font-size: 1.8rem; font-weight: 700; color: var(--text-dark); line-height: 1; }
+.chart-center .label { font-size: .8rem; font-weight: 500; color: var(--text-muted); }
+.threat-vectors, .link-safety-list { list-style: none; padding-left: 0; }
+.threat-vectors li { display: flex; align-items: center; font-size: .95rem; padding: .75rem; border-radius: .5rem; margin-bottom: .5rem; }
+.threat-vectors li .fa-fw { color: var(--high-risk-text); margin-right: .75rem; }
+.link-safety-list li { font-size: .9rem; }
+.link-safety-list a { word-break: break-all; }
+.link-safety-list .badge { font-weight: 600; }
+.security-tip-card, .details-card { background-color: #F3F4F6; border: 1px solid var(--border-color); border-radius: .5rem; padding: 1.25rem; margin-top: 1.5rem; }
+.details-card-title, .security-tip-card .tip-title { display: flex; align-items: center; font-weight: 600; color: var(--primary-color); margin-bottom: .5rem; }
+.details-card-title i, .security-tip-card .tip-title i { margin-right: .5rem; }
+.details-card-body p, .security-tip-card .tip-body { font-size: .9rem; color: var(--text-muted); margin-bottom: .25rem;}
+.details-card-body strong { color: var(--text-dark); }
+.redirect-warning { font-size: .8em; color: var(--medium-risk-text); margin-left: .5rem; }
+.badge-high { background-color: var(--high-risk-text) !important; color: white; }
+.badge-medium { background-color: var(--medium-risk-text) !important; color: white; }
+.badge-low { background-color: var(--low-risk-text) !important; color: white; }
+footer { text-align: center; padding: 2rem 0; font-size: .875rem; color: var(--text-muted); }
