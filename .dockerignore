@@ -13,10 +13,16 @@ __pycache__/
 .venv
 venv/
 
-# Database file (we want a fresh one inside the container)
+# Database file (this should always be ignored)
 database.db
-migrations/
 
 # IDE files
 .idea/
 .vscode/
+
+# Mac
+.DS_Store
+
+# We are no longer ignoring the migrations folder,
+# as it's needed for deployment.
+# migrations/
