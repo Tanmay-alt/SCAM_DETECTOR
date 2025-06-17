@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv
+venv/
+
+# Database file (we want a fresh one inside the container)
+database.db
+migrations/
+
+# IDE files
+.idea/
+.vscode/

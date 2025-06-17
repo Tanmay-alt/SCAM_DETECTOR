@@ -13,16 +13,23 @@ from urllib.parse import urlparse
 from flask import Flask, request, render_template, redirect, url_for, flash, Response
 from flask_caching import Cache
 from joblib import load
-from sklearn.base import BaseEstimator, TransformerMixin
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
+
+# --- IMPORT FROM THE NEW HELPER FILE ---
+from ml_helpers import TextStats, to_dense
+
 
 # ---- App & Extension Setup ----
 basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'a-very-secret-key-that-should-be-changed'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'database.db')
+database_url = os.environ.get('DATABASE_URL')
+if database_url and database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config.from_mapping({
     "CACHE_TYPE": "simple",
@@ -30,9 +37,21 @@ app.config.from_mapping({
 })
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db) # Initialize Flask-Migrate
 cache = Cache(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'login' # Redirect to /login if user tries to access a protected page
+login_manager.login_view = 'login'
+
+# (The rest of your app.py file, including models and routes, remains the same)
+# ...
+# THE LOCAL TextStats and to_dense DEFINITIONS ARE REMOVED FROM HERE
+# ...
+# ---- Load ML Model & Static Sets ----
+# ... (rest of the file is the same)
+
+
+# THE if __name__ == '__main__': BLOCK AT THE VERY BOTTOM SHOULD BE REMOVED OR LEFT EMPTY
+# It will not be used when running with Gunicorn in Docker.# Redirect to /login if user tries to access a protected page
 
 # ---- Database Models ----
 class User(UserMixin, db.Model):
@@ -95,20 +114,6 @@ def fetch_phishing_domains() -> set[str]:
             continue
     return domains
 
-# ---- Unpickle helpers ----
-class TextStats(BaseEstimator, TransformerMixin):
-    def fit(self, X, y=None): return self
-    def transform(self, X):
-        stats = []
-        for doc in X:
-            urls   = len(re.findall(r'https?://', doc))
-            excl   = doc.count('!')
-            caps   = len(re.findall(r'\b[A-Z]{2,}\b', doc))
-            length = len(doc)
-            stats.append([urls, excl, caps, length])
-        return np.array(stats)
-
-def to_dense(X): return X.toarray() if hasattr(X, 'toarray') else X
 
 # ---- Analysis Helpers (unchanged from before) ----
 def email_synopsis(text: str) -> str:
