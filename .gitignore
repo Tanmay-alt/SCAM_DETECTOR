@@ -18,4 +18,27 @@ venv/
 # The following lines are commented out to ensure the model and training data
 # are included in the repository for successful deployment on Render.
 # data/
+# *.joblib# .gitignore (Updated)
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+
+# Virtualenv
+venv/
+.env
+
+# VSCode
+.vscode/
+
+# Mac
+.DS_Store
+
+# Data & model artifacts
+# The data folder is not needed for deployment, only for training.
+data/
+
+# We comment out *.joblib so the final model IS included in the deployment.
 # *.joblib
