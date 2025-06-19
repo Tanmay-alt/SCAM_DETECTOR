@@ -1,0 +1,32 @@
+{% if vt_results and vt_results.status == 'found' %}
+<div class="details-card mt-4">
+    <h6 class="details-card-title"><i class="fas fa-shield-virus"></i>VirusTotal Analysis</h6>
+    <div class="details-card-body">
+        {% set total_vendors = vt_results.harmless + vt_results.malicious + vt_results.suspicious + vt_results.undetected %}
+        {% set total_threats = vt_results.malicious + vt_results.suspicious %}
+        
+        <p class="mb-2">
+            <strong class="text-danger">{{ vt_results.malicious }}</strong> malicious, 
+            <strong class="text-warning">{{ vt_results.suspicious }}</strong> suspicious,
+            <strong class="text-success">{{ vt_results.harmless }}</strong> harmless detections.
+        </p>
+
+        {% if total_threats > 0 %}
+            <p class="fw-bold text-danger">Detected by {{ total_threats }} out of {{ total_vendors }} security vendors.</p>
+        {% else %}
+            <p class="fw-bold text-success">No threats detected by {{ total_vendors }} security vendors.</p>
+        {% endif %}
+        
+        <a href="{{ vt_results.link }}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+            View Full Report <i class="fas fa-external-link-alt"></i>
+        </a>
+    </div>
+</div>
+{% elif vt_results and vt_results.status == 'not_found' %}
+<div class="details-card mt-4">
+    <h6 class="details-card-title"><i class="fas fa-shield-virus"></i>VirusTotal Analysis</h6>
+    <div class="details-card-body">
+        <p class="text-muted">This resource has not been analyzed by VirusTotal before.</p>
+    </div>
+</div>
+{% endif %}

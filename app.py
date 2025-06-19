@@ -8,6 +8,8 @@ import whois
 import socket
 import os
 import csv
+import json
+import base64
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from flask import Flask, request, render_template, redirect, url_for, flash, Response
@@ -17,41 +19,32 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
-
-# --- IMPORT FROM THE NEW HELPER FILE ---
+from sqlalchemy import func
 from ml_helpers import TextStats, to_dense
-
+import google.generativeai as genai
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 # ---- App & Extension Setup ----
 basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'a-very-secret-key-that-should-be-changed'
-database_url = os.environ.get('DATABASE_URL')
-if database_url and database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config.from_mapping({
-    "CACHE_TYPE": "simple",
-    "CACHE_DEFAULT_TIMEOUT": 3600
-})
 
+# Load configuration directly from environment variables
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# A small patch for compatibility between Render's Postgres URL and SQLAlchemy
+if app.config.get('SQLALCHEMY_DATABASE_URI', '').startswith("postgres://"):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+
+# Initialize extensions
 db = SQLAlchemy(app)
-migrate = Migrate(app, db) # Initialize Flask-Migrate
+migrate = Migrate(app, db)
 cache = Cache(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# (The rest of your app.py file, including models and routes, remains the same)
-# ...
-# THE LOCAL TextStats and to_dense DEFINITIONS ARE REMOVED FROM HERE
-# ...
-# ---- Load ML Model & Static Sets ----
-# ... (rest of the file is the same)
-
-
-# THE if __name__ == '__main__': BLOCK AT THE VERY BOTTOM SHOULD BE REMOVED OR LEFT EMPTY
-# It will not be used when running with Gunicorn in Docker.# Redirect to /login if user tries to access a protected page
 
 # ---- Database Models ----
 class User(UserMixin, db.Model):
@@ -59,12 +52,8 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     history = db.relationship('History', backref='author', lazy=True)
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+    def set_password(self, password): self.password_hash = generate_password_hash(password)
+    def check_password(self, password): return check_password_hash(self.password_hash, password)
 
 class History(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -80,10 +69,12 @@ class History(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# ---- Dynamic override lists ----
+# ===================================================================
+# ---- ALL HELPER FUNCTIONS ARE DEFINED HERE (BEFORE THEY ARE CALLED) ----
+# ===================================================================
+
 @cache.memoize(timeout=86400)
 def fetch_top_sites(limit=2000) -> set[str]:
-    # ... (rest of the function is unchanged)
     url = 'https://s3-us-west-1.amazonaws.com/umbrella-static/top-1m.csv.zip'
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
@@ -91,16 +82,13 @@ def fetch_top_sites(limit=2000) -> set[str]:
     with z.open('top-1m.csv') as f:
         domains = set()
         for idx, line in enumerate(f):
-            if idx >= limit:
-                break
+            if idx >= limit: break
             parts = line.decode('utf-8').strip().split(',')
-            if len(parts) == 2:
-                domains.add(parts[1].lower())
+            if len(parts) == 2: domains.add(parts[1].lower())
         return domains
 
 @cache.memoize(timeout=86400)
 def fetch_phishing_domains() -> set[str]:
-    # ... (rest of the function is unchanged)
     url = 'https://openphish.com/feed.txt'
     resp = requests.get(url, timeout=10)
     resp.raise_for_status()
@@ -108,14 +96,10 @@ def fetch_phishing_domains() -> set[str]:
     for link in resp.text.splitlines():
         try:
             dom = urlparse(link.strip()).netloc.lower()
-            if dom:
-                domains.add(dom)
-        except:
-            continue
+            if dom: domains.add(dom)
+        except: continue
     return domains
 
-
-# ---- Analysis Helpers (unchanged from before) ----
 def email_synopsis(text: str) -> str:
     reasons = []
     if re.search(r'\b(urgent|immediately|verify|credentials?|password|bank)\b', text, flags=re.I): reasons.append("Contains urgent/verification keywords")
@@ -204,13 +188,98 @@ def check_site_risk(url: str) -> dict:
     result['prob'] = min(1.0, base_prob + boost)
     return result
 
-# ---- Load ML Model & Static Sets ----
+@cache.memoize(timeout=3600)
+def check_virustotal(resource_type: str, resource: str) -> dict:
+    """Checks a resource (URL or IP) against the VirusTotal API."""
+    api_key = os.environ.get('VIRUSTOTAL_API_KEY')
+    if not api_key: return {}
+    if resource_type == 'urls': resource = base64.urlsafe_b64encode(resource.encode()).decode().strip("=")
+    api_url = f"https://www.virustotal.com/api/v3/{resource_type}/{resource}"
+    headers = {"x-apikey": api_key}
+    try:
+        resp = requests.get(api_url, headers=headers, timeout=10)
+        if resp.status_code == 404: return {'status': 'not_found'}
+        resp.raise_for_status()
+        data = resp.json().get('data', {})
+        stats = data.get('attributes', {}).get('last_analysis_stats', {})
+        vt_link = data.get('links', {}).get('self', '').replace('/api/v3/urls/', '/gui/url/')
+        return {'status': 'found', 'malicious': stats.get('malicious', 0), 'suspicious': stats.get('suspicious', 0), 'harmless': stats.get('harmless', 0), 'undetected': stats.get('undetected', 0), 'link': vt_link}
+    except requests.RequestException as e:
+        print(f"VirusTotal API error: {e}")
+        return {}
+
+def generate_phishing_email(company: str, scenario: str) -> dict:
+    """Uses Gemini to generate a phishing email subject and body."""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not configured.'}
+    
+    try:
+        genai.configure(api_key=api_key)
+        # UPDATED this line to use a current model name
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        
+        prompt = f"""
+        Create a realistic-looking but fake phishing email.
+        The email should impersonate the company: "{company}".
+        The scenario is: "{scenario}".
+        The email must have a clear sense of urgency or curiosity to trick a user into clicking a link.
+        Do NOT include any real links, instead use placeholder links like "https://{company.lower().replace(" ", "")}-support.xyz/login".
+        
+        Format the output as a valid JSON object with two keys: "subject" and "body".
+        The body should be formatted as simple HTML. Do not wrap the JSON in markdown backticks.
+        
+        Example output format:
+        {{
+            "subject": "Example Subject",
+            "body": "<p>Example HTML body.</p>"
+        }}
+        """
+        
+        response = model.generate_content(prompt)
+        return json.loads(response.text)
+
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return {'error': f'Failed to generate email content: {e}'}
+
+# app.py (Updated send_email function)
+
+def send_email(recipient: str, subject: str, body: str, from_name: str) -> bool:
+    """Sends an email using the SendGrid API with a custom From Name."""
+    api_key = os.environ.get('SENDGRID_API_KEY')
+    from_email_address = os.environ.get('MAIL_FROM_EMAIL')
+    if not api_key or not from_email_address:
+        print("SendGrid API key or From Email not configured.")
+        return False
+
+    # The from_email parameter can be a tuple: (email_address, name)
+    message = Mail(
+        from_email=(from_email_address, from_name),
+        to_emails=recipient,
+        subject=subject,
+        html_content=body)
+    try:
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+        return response.status_code == 202
+    except Exception as e:
+        print(f"SendGrid Error: {e}")
+        return False
+
+# ===================================================================
+# ---- Load ML Model & Static Sets (AFTER functions are defined) ----
+# ===================================================================
 model = load('scam_detector_robust.joblib')
 SAFE_DOMAINS = fetch_top_sites()
 HIGH_RISK_DOMAINS = fetch_phishing_domains()
 print(f"Loaded {len(SAFE_DOMAINS)} safe and {len(HIGH_RISK_DOMAINS)} high-risk domains.")
 
+
+# ===================================================================
 # ---- Main Application Routes ----
+# ===================================================================
+
 @app.route('/', methods=['GET','POST'])
 @login_required
 def index():
@@ -225,17 +294,14 @@ def index():
             text = request.form.get('email_text','').strip()
             context.update({'sender_email': sender, 'email_text': text})
             history_entry.input_data = sender
-            
             if text:
                 base = model.predict_proba([text])[0][1]; adj = adjust_probability(text, base)
                 risk = categorize_risk(adj); prob = f"{adj*100:.2f}%"
                 context.update({'risk': risk, 'probability': prob})
                 history_entry.risk = risk; history_entry.probability = prob
                 if risk in ('Medium Risk','High Risk'): context['synopsis'] = email_synopsis(text)
-                
                 urls = re.findall(r'https?://[^\s"<>\']+', text)
                 context['link_results'] = [check_site_risk(link) for link in set(urls)]
-
             m = re.search(r'@([\w\.-]+)$', sender)
             if m:
                 domain = m.group(1)
@@ -254,7 +320,8 @@ def index():
                 context.update({'ip_risk': risk, 'ip_list_status': status, 'ip_score': f"{prob*100:.2f}%"})
                 context['ip_geo_info'] = get_ip_geolocation(ip_addr)
                 history_entry.risk = risk; history_entry.probability = f"{prob*100:.2f}%"
-                history_entry.details = {'status': status}
+                context['ip_vt_results'] = check_virustotal('ip-addresses', ip_addr)
+                history_entry.details = {'status': status, 'vt_results': context['ip_vt_results']}
 
         elif check_type == 'site':
             url = request.form.get('site_url','').strip()
@@ -265,7 +332,8 @@ def index():
                 p = results['prob']; risk = categorize_site_risk(p)
                 context.update({'site_risk': risk, 'site_probability': f"{p*100:.2f}%", 'domain_age': results['age'], 'final_url': results['final_url']})
                 history_entry.risk = risk; history_entry.probability = f"{p*100:.2f}%"
-                history_entry.details = {'age': results['age'], 'final_url': results['final_url']}
+                context['site_vt_results'] = check_virustotal('urls', results['final_url'])
+                history_entry.details = {'age': results['age'], 'final_url': results['final_url'], 'vt_results': context['site_vt_results']}
                 try:
                     domain = urlparse(results['final_url']).netloc
                     ip = socket.gethostbyname(domain)
@@ -278,7 +346,6 @@ def index():
     context['history_records'] = History.query.filter_by(user_id=current_user.id).order_by(History.timestamp.desc()).all()
     return render_template('index.html', **context)
 
-# ---- Authentication Routes ----
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated: return redirect(url_for('index'))
@@ -314,37 +381,53 @@ def logout():
 @app.route('/export/csv')
 @login_required
 def export_csv():
-    """Exports the user's history to a CSV file."""
     records = History.query.filter_by(user_id=current_user.id).order_by(History.timestamp.desc()).all()
-    
-    # Use StringIO to create the CSV in memory
     output = io.StringIO()
     writer = csv.writer(output)
-
-    # Write the header row
     writer.writerow(['Date (UTC)', 'Type', 'Input', 'Risk', 'Score'])
-
-    # Write data rows
     for record in records:
-        writer.writerow([
-            record.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-            record.check_type,
-            record.input_data,
-            record.risk,
-            record.probability
-        ])
-
-    # Seek to the beginning of the stream
+        writer.writerow([record.timestamp.strftime('%Y-%m-%d %H:%M:%S'), record.check_type, record.input_data, record.risk, record.probability])
     output.seek(0)
+    return Response(output, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=analysis_history.csv"})
 
-    return Response(
-        output,
-        mimetype="text/csv",
-        headers={"Content-Disposition": "attachment;filename=analysis_history.csv"}
-    )
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    user_id = current_user.id
+    total_scans = db.session.query(func.count(History.id)).filter_by(user_id=user_id).scalar()
+    risk_breakdown_query = db.session.query(History.risk, func.count(History.risk)).filter_by(user_id=user_id).group_by(History.risk).all()
+    top_high_risk = db.session.query(History.input_data, func.count(History.input_data).label('count')).filter_by(user_id=user_id, risk='High Risk').group_by(History.input_data).order_by(func.count(History.input_data).desc()).limit(5).all()
+    risk_breakdown = {risk: count for risk, count in risk_breakdown_query}
+    stats = {'total_scans': total_scans, 'high_risk_count': risk_breakdown.get('High Risk', 0), 'medium_risk_count': risk_breakdown.get('Medium Risk', 0), 'low_risk_count': risk_breakdown.get('Low Risk', 0), 'top_high_risk': top_high_risk, 'chart_data': {'labels': list(risk_breakdown.keys()), 'values': list(risk_breakdown.values())}}
+    return render_template('dashboard.html', stats=stats)
 
+# app.py (Updated /simulator route)
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all() # Create database tables if they don't exist
-    app.run(debug=True)
+@app.route('/simulator', methods=['GET', 'POST'])
+@login_required
+def simulator():
+    if request.method == 'POST':
+        recipient = request.form.get('recipient_email')
+        company = request.form.get('company')
+        scenario = request.form.get('scenario')
+
+        # 1. Generate the email content with AI
+        email_content = generate_phishing_email(company, scenario)
+
+        if email_content.get('error'):
+            flash(f"AI Error: {email_content['error']}", 'danger')
+            return redirect(url_for('simulator'))
+        
+        # 2. Send the generated email with the custom From Name
+        subject = email_content.get('subject', f'Important Notification from {company}')
+        body = email_content.get('body', '<p>Please review your account.</p>')
+        from_name = f"The {company} Security Team" # Create the fake sender name
+        
+        if send_email(recipient, subject, body, from_name):
+            flash(f'Phishing simulation email has been sent to {recipient}!', 'success')
+        else:
+            flash('Failed to send the email. Please check server logs.', 'danger')
+
+        return redirect(url_for('simulator'))
+
+    return render_template('phishing_simulator.html')

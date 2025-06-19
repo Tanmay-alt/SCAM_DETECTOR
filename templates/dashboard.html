@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Scam Detector{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>Threat Intelligence Dashboard</h3>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <div class="bg-primary text-white p-3 rounded-3"><i class="fas fa-search fa-2x"></i></div>
+                </div>
+                <div>
+                    <h4 class="mb-0">{{ stats.total_scans }}</h4>
+                    <small class="text-muted">Total Scans</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <div class="bg-danger text-white p-3 rounded-3"><i class="fas fa-exclamation-triangle fa-2x"></i></div>
+                </div>
+                <div>
+                    <h4 class="mb-0">{{ stats.high_risk_count }}</h4>
+                    <small class="text-muted">High Risk</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <div class="bg-warning text-white p-3 rounded-3"><i class="fas fa-exclamation-circle fa-2x"></i></div>
+                </div>
+                <div>
+                    <h4 class="mb-0">{{ stats.medium_risk_count }}</h4>
+                    <small class="text-muted">Medium Risk</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <div class="bg-success text-white p-3 rounded-3"><i class="fas fa-check-circle fa-2x"></i></div>
+                </div>
+                <div>
+                    <h4 class="mb-0">{{ stats.low_risk_count }}</h4>
+                    <small class="text-muted">Low Risk</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card p-4 h-100">
+            <h5 class="mb-3">Risk Breakdown</h5>
+            <div style="height: 300px;">
+                <canvas id="riskChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card p-4 h-100">
+            <h5 class="mb-3">Top 5 High-Risk Inputs</h5>
+            {% if stats.top_high_risk %}
+                <ul class="list-group list-group-flush">
+                {% for item, count in stats.top_high_risk %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="text-truncate" style="max-width: 80%;">{{ item }}</span>
+                        <span class="badge bg-danger rounded-pill">{{ count }}</span>
+                    </li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <p class="text-muted text-center mt-4">No high-risk items have been recorded yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const ctx = document.getElementById('riskChart');
+    if (ctx) {
+        const chartData = {{ stats.chart_data | tojson }};
+        
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Risk Scans',
+                    data: chartData.values,
+                    backgroundColor: [
+                        'rgba(220, 53, 69, 0.7)',  // High Risk
+                        'rgba(255, 193, 7, 0.7)', // Medium Risk
+                        'rgba(25, 135, 84, 0.7)'  // Low Risk
+                    ],
+                    borderColor: [
+                        'rgba(220, 53, 69, 1)',
+                        'rgba(255, 193, 7, 1)',
+                        'rgba(25, 135, 84, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
