@@ -14,3 +14,7 @@ psycopg2-binary
 # requirements.txt (add these to the end)
 google-generativeai
 sendgrid
+pandas
+spacy
+pyap
+twilio

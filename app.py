@@ -1,15 +1,4 @@
-import re
-import io
-import zipfile
-import numpy as np
-import dns.resolver
-import requests
-import whois
-import socket
-import os
-import csv
-import json
-import base64
+import re, io, zipfile, numpy as np, dns.resolver, requests, whois, socket, os, csv, json, base64
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from flask import Flask, request, render_template, redirect, url_for, flash, Response
@@ -24,24 +13,40 @@ from ml_helpers import TextStats, to_dense
 import google.generativeai as genai
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+import spacy
+import pandas as pd
+import pyap
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
+
 
 # ---- App & Extension Setup ----
 basedir = os.path.abspath(os.path.dirname(__file__))
-app = Flask(__name__)
+app = Flask(__name__, instance_relative_config=True)
 
-# Load configuration directly from environment variables
-app.config['SECRET_KEY'] = 'a-super-secret-key-for-local-dev' # Hardcoded for local non-docker setup
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'database.db')
+# Ensure the instance folder exists for the local database
+try:
+    os.makedirs(app.instance_path)
+except OSError:
+    pass
+
+# --- Configuration ---
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a-super-secret-key-for-local-dev')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# A small patch for compatibility between Render's Postgres URL and SQLAlchemy
-if app.config.get('SQLALCHEMY_DATABASE_URI', '').startswith("postgres://"):
-    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+# This configuration works for both local (non-Docker) and production (Render/Docker)
+database_url = os.environ.get('DATABASE_URL')
+if database_url:
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'database.db')
 
-# Initialize extensions
+# --- Initialize Extensions ---
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-cache = Cache(app)
+cache = Cache(app, config={'CACHE_TYPE': os.environ.get('CACHE_TYPE', 'simple')})
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -72,6 +77,27 @@ def load_user(user_id):
 # ===================================================================
 # ---- ALL HELPER FUNCTIONS ARE DEFINED HERE (BEFORE THEY ARE CALLED) ----
 # ===================================================================
+@cache.memoize(timeout=86400)
+def check_phone_number(phone_number: str) -> dict:
+    """Uses Twilio to get details about a phone number."""
+    account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+    auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+    if not account_sid or not auth_token:
+        return {'valid': False, 'error': 'Twilio credentials not configured.'}
+
+    client = Client(account_sid, auth_token)
+    try:
+        lookup = client.lookups.v2.phone_numbers(phone_number).fetch(fields='line_type_intelligence')
+        return {
+            'valid': lookup.valid,
+            'line_type': lookup.line_type_intelligence.get('type', 'N/A') if lookup.line_type_intelligence else 'N/A',
+            'carrier': lookup.line_type_intelligence.get('carrier_name', 'N/A') if lookup.line_type_intelligence else 'N/A'
+        }
+    except TwilioRestException as e:
+        if e.code == 20404:
+            return {'valid': False, 'error': 'Invalid or not found.'}
+        return {'valid': False, 'error': str(e)}
+
 
 @cache.memoize(timeout=86400)
 def fetch_top_sites(limit=2000) -> set[str]:
@@ -190,7 +216,6 @@ def check_site_risk(url: str) -> dict:
 
 @cache.memoize(timeout=3600)
 def check_virustotal(resource_type: str, resource: str) -> dict:
-    """Checks a resource (URL or IP) against the VirusTotal API."""
     api_key = os.environ.get('VIRUSTOTAL_API_KEY')
     if not api_key: return {}
     if resource_type == 'urls': resource = base64.urlsafe_b64encode(resource.encode()).decode().strip("=")
@@ -209,72 +234,68 @@ def check_virustotal(resource_type: str, resource: str) -> dict:
         return {}
 
 def generate_phishing_email(company: str, scenario: str) -> dict:
-    """Uses Gemini to generate a phishing email subject and body."""
     api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key:
-        return {'error': 'GEMINI_API_KEY not configured.'}
-    
+    if not api_key: return {'error': 'GEMINI_API_KEY not configured.'}
     try:
         genai.configure(api_key=api_key)
-        # UPDATED this line to use a current model name
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        
-        prompt = f"""
-        Create a realistic-looking but fake phishing email.
-        The email should impersonate the company: "{company}".
-        The scenario is: "{scenario}".
-        The email must have a clear sense of urgency or curiosity to trick a user into clicking a link.
-        Do NOT include any real links, instead use placeholder links like "https://{company.lower().replace(" ", "")}-support.xyz/login".
-        
-        Format the output as a valid JSON object with two keys: "subject" and "body".
-        The body should be formatted as simple HTML. Do not wrap the JSON in markdown backticks.
-        
-        Example output format:
-        {{
-            "subject": "Example Subject",
-            "body": "<p>Example HTML body.</p>"
-        }}
-        """
-        
+        prompt = f"""Create a realistic-looking but fake phishing email for educational purposes. The email should impersonate the company: "{company}". The scenario is: "{scenario}". The email must have a clear sense of urgency or curiosity to trick a user into clicking a link. Do NOT include any real links, instead use placeholder links like "https://{company.lower().replace(" ", "")}-support-center.com/login-details". Format the output as a valid JSON object with two keys: "subject" and "body". The body should be formatted as simple HTML. Do not wrap the JSON in markdown backticks or any other text. Example output format: {{"subject": "Example Subject", "body": "<p>Example HTML body.</p>"}}"""
         response = model.generate_content(prompt)
-        return json.loads(response.text)
-
+        print(f"Gemini RAW response text: {response.text}")
+        try:
+            return json.loads(response.text)
+        except json.JSONDecodeError:
+            return {'error': 'The AI model returned a non-JSON response, likely due to its safety filters. Check the server logs for the raw output.'}
     except Exception as e:
         print(f"Gemini API Error: {e}")
         return {'error': f'Failed to generate email content: {e}'}
 
-# app.py (Updated send_email function)
-
 def send_email(recipient: str, subject: str, body: str, from_name: str) -> bool:
-    """Sends an email using the SendGrid API with a custom From Name."""
     api_key = os.environ.get('SENDGRID_API_KEY')
     from_email_address = os.environ.get('MAIL_FROM_EMAIL')
     if not api_key or not from_email_address:
         print("SendGrid API key or From Email not configured.")
         return False
-
-    # The from_email parameter can be a tuple: (email_address, name)
-    message = Mail(
-        from_email=(from_email_address, from_name),
-        to_emails=recipient,
-        subject=subject,
-        html_content=body)
+    message = Mail(from_email=(from_email_address, from_name), to_emails=recipient, subject=subject, html_content=body)
     try:
         sg = SendGridAPIClient(api_key)
         response = sg.send(message)
         return response.status_code == 202
     except Exception as e:
-        print(f"SendGrid Error: {e}")
+        print(f"Full SendGrid Library Error: {e}")
         return False
 
+def scrub_text(text):
+    if not isinstance(text, str): return text
+    scrubbed_text = text
+    addresses = pyap.parse(scrubbed_text, country='US')
+    for address in addresses:
+        city = address.city or ''; state = address.state or ''; zip_code = address.zip_code or ''
+        general_location = f"[STREET_ADDRESS], {city}, {state} {zip_code}".strip(", ")
+        scrubbed_text = scrubbed_text.replace(address.full_address, general_location)
+    street_address_regex = r'\d+\s+([a-zA-Z]+\s+){1,4}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Boulevard|Blvd)\.?'
+    scrubbed_text = re.sub(street_address_regex, "[STREET_ADDRESS]", scrubbed_text, flags=re.IGNORECASE)
+    doc = nlp(scrubbed_text)
+    final_text_list = list(scrubbed_text)
+    for ent in reversed(doc.ents):
+        if ent.label_ in ['PERSON', 'ORG']:
+            start = ent.start_char; end = ent.end_char
+            final_text_list[start:end] = f"[{ent.label_}]"
+    text_after_spacy = "".join(final_text_list)
+    email_regex = r'[\w\.-]+@[\w\.-]+\.\w+'
+    final_text = re.sub(email_regex, "[EMAIL]", text_after_spacy)
+    phone_regex = r'\(?(\d{3})\)?[-.\s]?\d{3}[-.\s]?\d{4}'
+    final_text = re.sub(phone_regex, lambda m: f"({m.group(1)}) ***-****", final_text)
+    return final_text
+
 # ===================================================================
-# ---- Load ML Model & Static Sets (AFTER functions are defined) ----
+# ---- Load Models & Static Sets (AFTER functions are defined) ----
 # ===================================================================
+nlp = spacy.load("en_core_web_sm")
 model = load('scam_detector_robust.joblib')
 SAFE_DOMAINS = fetch_top_sites()
 HIGH_RISK_DOMAINS = fetch_phishing_domains()
-print(f"Loaded {len(SAFE_DOMAINS)} safe and {len(HIGH_RISK_DOMAINS)} high-risk domains.")
-
+print("Loaded spaCy model, ML model, and domain lists.")
 
 # ===================================================================
 # ---- Main Application Routes ----
@@ -283,7 +304,7 @@ print(f"Loaded {len(SAFE_DOMAINS)} safe and {len(HIGH_RISK_DOMAINS)} high-risk d
 @app.route('/', methods=['GET','POST'])
 @login_required
 def index():
-    context = {'check_type': None}
+    context = {'check_type': None, 'active_tab': 'analyzer'}
     if request.method == 'POST':
         check_type = request.form.get('check_type')
         context['check_type'] = check_type
@@ -301,7 +322,12 @@ def index():
                 history_entry.risk = risk; history_entry.probability = prob
                 if risk in ('Medium Risk','High Risk'): context['synopsis'] = email_synopsis(text)
                 urls = re.findall(r'https?://[^\s"<>\']+', text)
-                context['link_results'] = [check_site_risk(link) for link in set(urls)]
+                link_results = []
+                for link in set(urls):
+                    site_results = check_site_risk(link)
+                    p = site_results['prob']
+                    link_results.append({'url': link, 'risk': categorize_site_risk(p), 'prob': f"{p*100:.2f}%", 'final_url': site_results['final_url']})
+                context['link_results'] = link_results
             m = re.search(r'@([\w\.-]+)$', sender)
             if m:
                 domain = m.group(1)
@@ -310,7 +336,6 @@ def index():
                     ip = socket.gethostbyname(domain)
                     context['sender_geo_info'] = get_ip_geolocation(ip)
                 except Exception: context['verified'] = False
-
         elif check_type == 'ip':
             ip_addr = request.form.get('ip_address','').strip()
             context['ip_address'] = ip_addr
@@ -322,7 +347,6 @@ def index():
                 history_entry.risk = risk; history_entry.probability = f"{prob*100:.2f}%"
                 context['ip_vt_results'] = check_virustotal('ip-addresses', ip_addr)
                 history_entry.details = {'status': status, 'vt_results': context['ip_vt_results']}
-
         elif check_type == 'site':
             url = request.form.get('site_url','').strip()
             context['site_url'] = url
@@ -339,16 +363,65 @@ def index():
                     ip = socket.gethostbyname(domain)
                     context['site_geo_info'] = get_ip_geolocation(ip)
                 except Exception: pass
+        elif check_type == 'sms':
+            phone_number = request.form.get('phone_number','').strip()
+            message_text = request.form.get('message_text','').strip()
+            
+            context.update({'phone_number': phone_number, 'message_text': message_text})
+            history_entry.input_data = phone_number
+            
+            if phone_number and message_text:
+                # 1. Analyze the phone number's reputation
+                phone_details = check_phone_number(phone_number)
+                context['phone_details'] = phone_details
+                
+                # 2. Analyze the message text with the existing ML model
+                base = model.predict_proba([message_text])[0][1]
+                adj = adjust_probability(message_text, base)
+                risk = categorize_risk(adj)
+                
+                # 3. Boost the risk score if the number is a VoIP line
+                if phone_details.get('line_type') == 'voip':
+                    adj = min(1.0, adj + 0.3) # Add a significant risk penalty
+                    risk = categorize_risk(adj)
+
+                prob = f"{adj*100:.2f}%"
+                
+                # 4. Save the final results to be displayed
+                context.update({'sms_risk': risk, 'sms_probability': prob})
+                history_entry.risk = risk
+                history_entry.probability = prob
+                history_entry.details = phone_details
         
         db.session.add(history_entry)
         db.session.commit()
+    
 
-    context['history_records'] = History.query.filter_by(user_id=current_user.id).order_by(History.timestamp.desc()).all()
+        
     return render_template('index.html', **context)
 
+# ---- NEW: Dedicated History Page Route ----
+@app.route('/history')
+@login_required
+def history():
+    history_records = History.query.filter_by(user_id=current_user.id).order_by(History.timestamp.desc()).all()
+    return render_template('history.html', history_records=history_records)
+
+# ---- NEW: Route to Clear History ----
+@app.route('/history/clear', methods=['POST'])
+@login_required
+def clear_history():
+    # Delete all history records for the current user
+    History.query.filter_by(user_id=current_user.id).delete()
+    db.session.commit()
+    flash('Your analysis history has been permanently deleted.', 'success')
+    return redirect(url_for('history'))
+
+# ---- Authentication Routes ----
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('index'))
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
     if request.method == 'POST':
         user = User.query.filter_by(username=request.form['username']).first()
         if user and user.check_password(request.form['password']):
@@ -359,7 +432,8 @@ def login():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated: return redirect(url_for('index'))
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
     if request.method == 'POST':
         if User.query.filter_by(username=request.form['username']).first():
             flash('Username already exists', 'warning')
@@ -378,6 +452,7 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+# ---- Tool Routes ----
 @app.route('/export/csv')
 @login_required
 def export_csv():
@@ -401,8 +476,6 @@ def dashboard():
     stats = {'total_scans': total_scans, 'high_risk_count': risk_breakdown.get('High Risk', 0), 'medium_risk_count': risk_breakdown.get('Medium Risk', 0), 'low_risk_count': risk_breakdown.get('Low Risk', 0), 'top_high_risk': top_high_risk, 'chart_data': {'labels': list(risk_breakdown.keys()), 'values': list(risk_breakdown.values())}}
     return render_template('dashboard.html', stats=stats)
 
-# app.py (Updated /simulator route)
-
 @app.route('/simulator', methods=['GET', 'POST'])
 @login_required
 def simulator():
@@ -410,24 +483,50 @@ def simulator():
         recipient = request.form.get('recipient_email')
         company = request.form.get('company')
         scenario = request.form.get('scenario')
-
-        # 1. Generate the email content with AI
         email_content = generate_phishing_email(company, scenario)
-
         if email_content.get('error'):
             flash(f"AI Error: {email_content['error']}", 'danger')
             return redirect(url_for('simulator'))
-        
-        # 2. Send the generated email with the custom From Name
         subject = email_content.get('subject', f'Important Notification from {company}')
         body = email_content.get('body', '<p>Please review your account.</p>')
-        from_name = f"The {company} Security Team" # Create the fake sender name
-        
+        from_name = f"The {company} Security Team"
         if send_email(recipient, subject, body, from_name):
             flash(f'Phishing simulation email has been sent to {recipient}!', 'success')
         else:
             flash('Failed to send the email. Please check server logs.', 'danger')
-
         return redirect(url_for('simulator'))
-
     return render_template('phishing_simulator.html')
+
+@app.route('/pii-scrubber', methods=['GET', 'POST'])
+@login_required
+def pii_scrubber():
+    if request.method == 'POST':
+        if 'csv_file' not in request.files:
+            flash('No file part in the request.', 'danger')
+            return redirect(request.url)
+        file = request.files['csv_file']
+        if file.filename == '':
+            flash('No file selected.', 'danger')
+            return redirect(request.url)
+        column_names_str = request.form.get('column_name')
+        if not column_names_str:
+            flash('You must specify at least one column name to scrub.', 'danger')
+            return redirect(request.url)
+        if file and file.filename.endswith('.csv'):
+            try:
+                df = pd.read_csv(file)
+                columns_to_scrub = [col.strip() for col in column_names_str.split(',')]
+                for col_name in columns_to_scrub:
+                    if col_name not in df.columns:
+                        flash(f"Error: Column '{col_name}' not found in the uploaded file.", 'danger')
+                        return redirect(request.url)
+                for col_name in columns_to_scrub:
+                    df[col_name] = df[col_name].apply(scrub_text)
+                output = io.StringIO()
+                df.to_csv(output, index=False)
+                output.seek(0)
+                return Response(output, mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=scrubbed_data.csv"})
+            except Exception as e:
+                flash(f"An error occurred while processing the file: {e}", 'danger')
+                return redirect(request.url)
+    return render_template('pii_scrubber.html')

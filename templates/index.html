@@ -3,72 +3,128 @@
 {% block title %}Scam Detector{% endblock %}
 
 {% block content %}
-<ul class="nav nav-pills justify-content-center mb-5">
-  <li class="nav-item mx-1">
-    <button class="nav-link active" data-bs-target="#analyze" data-bs-toggle="pill">
-      <i class="fas fa-search me-2"></i>Analyze
-    </button>
-  </li>
-  <li class="nav-item mx-1">
-    <button class="nav-link" data-bs-target="#history" data-bs-toggle="pill">
-      <i class="fas fa-history me-2"></i>My History
-    </button>
-  </li>
-</ul>
+<div class="row justify-content-center mb-1" style="position: relative; z-index: 2000;">
+    <div class="col-auto">
+        <div class="p-2 bg-white rounded-pill shadow-sm">
+            <ul class="nav nav-pills" id="main-nav-pills">
+                <li class="nav-item">
+                    <a class="nav-link active" data-bs-toggle="pill" href="#analyze">
+                        <i class="fas fa-search me-2"></i>Analyze
+                    </a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
+                        <i class="fas fa-tools me-2"></i>Tools
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('dashboard') }}">Intelligence Dashboard</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('simulator') }}">AI Phishing Simulator</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('pii_scrubber') }}">PII Data Scrubber</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="analyze">
+      </div>
+</div>
+
+  <div class="tab-pane fade" id="history">
+      <div class="card p-4 p-md-1">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3>My Analysis History</h3>
+            <a href="{{ url_for('export_csv') }}" class="btn btn-outline-primary"><i class="fas fa-file-csv me-2"></i>Export to CSV</a>
+          </div>
+          <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                  <thead>
+                      <tr>
+                          <th>Date</th>
+                          <th>Type</th>
+                          <th>Input</th>
+                          <th>Risk</th>
+                          <th>Score</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {% for record in history_records %}
+                      <tr>
+                          <td>{{ record.timestamp.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+                          <td>
+                              {% if record.check_type == 'email' %}
+                                  <span class="badge bg-primary"><i class="fas fa-envelope-open-text fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                              {% elif record.check_type == 'ip' %}
+                                  <span class="badge bg-warning text-dark"><i class="fas fa-network-wired fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                              {% elif record.check_type == 'site' %}
+                                  <span class="badge bg-info text-dark"><i class="fas fa-globe fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                              {% elif record.check_type == 'sms' %}
+                                  <span class="badge" style="background-color: #5865F2; color: white;"><i class="fas fa-comment-dots fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                              {% endif %}
+                          </td>
+                          <td class="text-truncate" style="max-width: 300px;">{{ record.input_data }}</td>
+                          <td>
+                            <span class="badge {% if record.risk=='High Risk' %}bg-danger{% elif record.risk=='Medium Risk' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ record.risk }}</span>
+                          </td>
+                          <td>{{ record.probability }}</td>
+                      </tr>
+                      {% else %}
+                      <tr>
+                          <td colspan="5" class="text-center">You have no saved history yet.</td>
+                      </tr>
+                      {% endfor %}
+                  </tbody>
+              </table>
+          </div>
+      </div>
+  </div>
+</div>
 
 <div class="tab-content">
   <div class="tab-pane fade show active" id="analyze">
     <div class="row g-4">
-      
       <div class="col-lg-7">
-        <div class="vstack gap-4">
-          
-          <div class="card">
-            <div class="card-body p-4">
-              <h5 class="mb-4"><i class="fas fa-envelope-open-text me-2"></i>Analyze Email Content</h5>
-              <form method="post">
-                <input type="hidden" name="check_type" value="email">
-                <div class="mb-3">
-                  <label for="sender_email" class="form-label fw-medium">Sender’s Email</label>
-                  <input type="email" id="sender_email" name="sender_email" class="form-control" placeholder="alice@example.com" required>
-                </div>
-                <div class="mb-4">
-                  <label for="email_text" class="form-label fw-medium">Email Content</label>
-                  <textarea id="email_text" name="email_text" class="form-control" placeholder="Paste the full email content here..." style="height:160px" required></textarea>
-                </div>
-                <div class="d-grid"><button type="submit" class="btn btn-primary">Analyze Email</button></div>
-              </form>
+        <div class="card p-2">
+          <div class="card-body">
+            <ul class="nav nav-tabs nav-fill mb-4">
+              <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#email-form-pane"><i class="fas fa-envelope-open-text me-2"></i>Email</a></li>
+              <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#ip-form-pane"><i class="fas fa-network-wired me-2"></i>IP Address</a></li>
+              <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#site-form-pane"><i class="fas fa-globe me-2"></i>Website</a></li>
+              <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#sms-form-pane"><i class="fas fa-comment-dots me-2"></i>SMS / Text</a></li>
+            </ul>
+
+            <div class="tab-content p-2">
+              <div class="tab-pane container active" id="email-form-pane">
+                <h5 class="mb-3">Analyze Email Content</h5>
+                <form method="post"><input type="hidden" name="check_type" value="email"><div class="mb-3"><label for="sender_email" class="form-label fw-medium">Sender’s Email</label><input type="email" id="sender_email" name="sender_email" class="form-control" placeholder="alice@example.com" required></div><div class="mb-4"><label for="email_text" class="form-label fw-medium">Email Content</label><textarea id="email_text" name="email_text" class="form-control" placeholder="Paste the full email content here..." style="height:160px" required></textarea></div><div class="d-grid"><button type="submit" class="btn btn-primary">Analyze Email</button></div></form>
+              </div>
+              <div class="tab-pane container fade" id="ip-form-pane">
+                <h5 class="mb-3">Check IP Reputation</h5>
+                <form method="post"><input type="hidden" name="check_type" value="ip"><div class="mb-3"><label for="ip_address" class="form-label fw-medium">IP Address</label><input type="text" id="ip_address" name="ip_address" class="form-control" placeholder="8.8.8.8" required></div><div class="d-grid mt-4"><button type="submit" class="btn btn-primary">Check IP</button></div></form>
+              </div>
+              <div class="tab-pane container fade" id="site-form-pane">
+                <h5 class="mb-3">Check Website Risk</h5>
+                <form method="post"><input type="hidden" name="check_type" value="site"><div class="mb-3"><label for="site_url" class="form-label fw-medium">Website URL</label><input type="url" id="site_url" name="site_url" class="form-control" placeholder="https://example.com" required></div><div class="d-grid mt-4"><button type="submit" class="btn btn-primary">Check Website</button></div></form>
+              </div>
+              <div class="tab-pane container fade" id="sms-form-pane">
+                <h5 class="mb-3">Analyze SMS/Text Message</h5>
+                <form method="post">
+                  <input type="hidden" name="check_type" value="sms">
+                  <div class="mb-3">
+                    <label for="phone_number" class="form-label fw-medium">Sender's Phone Number</label>
+                    <input type="tel" id="phone_number" name="phone_number" class="form-control" placeholder="+15551234567" required>
+                  </div>
+                  <div class="mb-4">
+                    <label for="message_text" class="form-label fw-medium">Message Text</label>
+                    <textarea id="message_text" name="message_text" class="form-control" placeholder="Paste the suspicious text message here..." style="height:160px" required></textarea>
+                  </div>
+                  <div class="d-grid"><button type="submit" class="btn btn-primary">Analyze SMS</button></div>
+                </form>
+              </div>
             </div>
           </div>
-
-          <div class="card">
-            <div class="card-body p-4">
-              <h5 class="mb-4"><i class="fas fa-network-wired me-2"></i>Check IP Reputation</h5>
-              <form method="post">
-                <input type="hidden" name="check_type" value="ip">
-                <div class="mb-3">
-                  <label for="ip_address" class="form-label fw-medium">IP Address</label>
-                  <input type="text" id="ip_address" name="ip_address" class="form-control" placeholder="8.8.8.8" required>
-                </div>
-                <div class="d-grid"><button type="submit" class="btn btn-primary">Check IP</button></div>
-              </form>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-body p-4">
-              <h5 class="mb-4"><i class="fas fa-globe me-2"></i>Check Website Risk</h5>
-              <form method="post">
-                <input type="hidden" name="check_type" value="site">
-                <div class="mb-3">
-                  <label for="site_url" class="form-label fw-medium">Website URL</label>
-                  <input type="url" id="site_url" name="site_url" class="form-control" placeholder="https://example.com" required>
-                </div>
-                <div class="d-grid"><button type="submit" class="btn btn-primary">Check Website</button></div>
-              </form>
-            </div>
-          </div>
-
         </div>
       </div>
 
@@ -77,34 +133,43 @@
           <h5 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Analysis Result</h5>
           
           {% if risk %}
-            <div class="text-center mb-3"><span class="risk-badge {% if risk=='High Risk' %}high{% elif risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ risk }}</span></div>
-            <div class="chart-container"><canvas id="probChart"></canvas><div class="chart-center"><div class="score">{{ probability }}</div><div class="label">Risk Score</div></div></div>
-            <div class="text-center mb-4"><p class="mb-1"><strong>Sender:</strong> {{ sender_email }}</p>{% if verified %}<span class="status-badge verified"><i class="fas fa-check-circle me-1"></i>Sender Verified</span>{% else %}<span class="status-badge unverified"><i class="fas fa-times-circle me-1"></i>Unverified Sender</span>{% endif %}</div>
+            <div class="text-center mb-3"><span class="risk-badge {% if risk=='High Risk' %}high{% elif risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ risk }}</span></div><div class="chart-container"><canvas id="probChart"></canvas><div class="chart-center"><div class="score">{{ probability }}</div><div class="label">Risk Score</div></div></div><div class="text-center mb-4"><p class="mb-1"><strong>Sender:</strong> {{ sender_email }}</p>{% if verified %}<span class="status-badge verified"><i class="fas fa-check-circle me-1"></i>Sender Verified</span>{% else %}<span class="status-badge unverified"><i class="fas fa-times-circle me-1"></i>Unverified Sender</span>{% endif %}</div>
             {% if sender_geo_info and sender_geo_info.country %}<div class="details-card mb-4"><h6 class="details-card-title"><i class="fas fa-server"></i>Sender Server Details</h6><div class="details-card-body"><p><strong>Country:</strong> {{ sender_geo_info.country }}</p><p><strong>City:</strong> {{ sender_geo_info.city }}</p><p><strong>ISP:</strong> {{ sender_geo_info.isp }}</p></div></div>{% endif %}
+            {% with vt_results=email_vt_results %}{% include 'virustotal_card.html' %}{% endwith %}
             {% if synopsis %}<div class="mb-4"><h6 class="fw-semibold">Threat Vectors</h6><ul class="threat-vectors" id="threat-vectors-list"></ul><template id="synopsis-data" data-synopsis="{{ synopsis | e }}"></template></div>{% endif %}
             <div class="security-tip-card" id="security-tip-card-email" style="display: none;"><h6 class="tip-title"><i class="fas fa-lightbulb"></i><span class="tip-title-text"></span></h6><p class="tip-body"></p></div>
           
           {% elif ip_risk %}
-            <div class="text-center mb-3"><span class="risk-badge {% if ip_risk=='High Risk' %}high{% elif ip_risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ ip_risk }}</span></div>
-            <div class="chart-container"><canvas id="ipProbChart"></canvas><div class="chart-center"><div class="score">{{ ip_score }}</div><div class="label">Risk Score</div></div></div>
-            <p class="mb-3 text-center"><strong>List Status:</strong> {{ ip_list_status }}</p>
+            <div class="text-center mb-3"><span class="risk-badge {% if ip_risk=='High Risk' %}high{% elif ip_risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ ip_risk }}</span></div><div class="chart-container"><canvas id="ipProbChart"></canvas><div class="chart-center"><div class="score">{{ ip_score }}</div><div class="label">Risk Score</div></div></div><p class="mb-3 text-center"><strong>Input:</strong> {{ ip_address }}</p><p class="mb-3 text-center"><strong>List Status:</strong> {{ ip_list_status }}</p>
             {% with vt_results=ip_vt_results %}{% include 'virustotal_card.html' %}{% endwith %}
             <div class="security-tip-card" id="security-tip-card-ip" style="display: none;"><h6 class="tip-title"><i class="fas fa-lightbulb"></i><span class="tip-title-text"></span></h6><p class="tip-body"></p></div>
           
           {% elif site_risk %}
-            <div class="text-center mb-3"><span class="risk-badge {% if site_risk=='High Risk' %}high{% elif site_risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ site_risk }}</span></div>
-            <div class="chart-container"><canvas id="siteProbChart"></canvas><div class="chart-center"><div class="score">{{ site_probability }}</div><div class="label">Risk Score</div></div></div>
-            <p class="mb-3 text-center text-truncate"><strong>URL:</strong> {{ site_url }}</p>
+            <div class="text-center mb-3"><span class="risk-badge {% if site_risk=='High Risk' %}high{% elif site_risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ site_risk }}</span></div><div class="chart-container"><canvas id="siteProbChart"></canvas><div class="chart-center"><div class="score">{{ site_probability }}</div><div class="label">Risk Score</div></div></div><p class="mb-3 text-center text-truncate"><strong>URL:</strong> {{ site_url }}</p>
             {% if final_url and site_url != final_url %}<div class="alert alert-warning text-center"><i class="fas fa-exclamation-triangle me-1"></i>Redirects to: {{ final_url }}</div>{% endif %}
             <div class="details-card"><h6 class="details-card-title"><i class="fas fa-info-circle"></i>Domain Details</h6><div class="details-card-body">{% if domain_age is not none %}<p><strong>Domain Age:</strong> {{ domain_age }} days</p>{% else %}<p><strong>Domain Age:</strong> Unknown</p>{% endif %}{% if site_geo_info and site_geo_info.country %}<p><strong>Server Country:</strong> {{ site_geo_info.country }}</p>{% endif %}</div></div>
             {% with vt_results=site_vt_results %}{% include 'virustotal_card.html' %}{% endwith %}
             <div class="security-tip-card" id="security-tip-card-site" style="display: none;"><h6 class="tip-title"><i class="fas fa-lightbulb"></i><span class="tip-title-text"></span></h6><p class="tip-body"></p></div>
-          
-          {% else %}
-            <div class="text-center text-muted p-5">
-              <i class="fas fa-search fa-3x mb-3"></i>
-              <p>Your analysis results will appear here.</p>
+            
+          {% elif sms_risk %}
+            <div class="text-center mb-3"><span class="risk-badge {% if sms_risk=='High Risk' %}high{% elif sms_risk=='Medium Risk' %}medium{% else %}low{% endif %}">{{ sms_risk }}</span></div>
+            <div class="chart-container"><canvas id="smsProbChart"></canvas><div class="chart-center"><div class="score">{{ sms_probability }}</div><div class="label">Text Risk Score</div></div></div>
+            <div class="details-card mt-4">
+                <h6 class="details-card-title"><i class="fas fa-phone"></i>Sender Details</h6>
+                <div class="details-card-body">
+                    <p><strong>Number:</strong> {{ phone_number }}</p>
+                    {% if phone_details and phone_details.valid %}
+                        <p><strong>Carrier:</strong> {{ phone_details.carrier }}</p>
+                        <p><strong>Line Type:</strong> <span class="fw-bold {% if phone_details.line_type == 'voip' %}text-danger{% endif %}">{{ phone_details.line_type|capitalize }}</span></p>
+                        {% if phone_details.line_type == 'voip' %}<small class="text-danger">Warning: VoIP numbers are often used for scams.</small>{% endif %}
+                    {% else %}
+                        <p class="text-danger fw-bold">{{ phone_details.error or 'Invalid Number' }}</p>
+                    {% endif %}
+                </div>
             </div>
+
+          {% else %}
+            <div class="text-center text-muted p-5"><i class="fas fa-search fa-3x mb-3"></i><p>Your analysis results will appear here.</p></div>
           {% endif %}
         </div>
       </div>
@@ -112,36 +177,7 @@
   </div>
 
   <div class="tab-pane fade" id="history">
-      <div class="card p-4 p-md-5">
-          <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3>My Analysis History</h3>
-            <a href="{{ url_for('export_csv') }}" class="btn btn-outline-primary"><i class="fas fa-file-csv me-2"></i>Export to CSV</a>
-          </div>
-          <div class="table-responsive">
-              <table class="table table-hover align-middle">
-                  <thead><tr><th>Date</th><th>Type</th><th>Input</th><th>Risk</th><th>Score</th></tr></thead>
-                  <tbody>
-                      {% for record in history_records %}
-                      <tr>
-                          <td>{{ record.timestamp.strftime('%Y-%m-%d %H:%M') }} UTC</td>
-                          <td>
-                              {% if record.check_type == 'email' %}<span class="badge bg-primary"><i class="fas fa-envelope-open-text fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
-                              {% elif record.check_type == 'ip' %}<span class="badge bg-warning text-dark"><i class="fas fa-network-wired fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
-                              {% elif record.check_type == 'site' %}<span class="badge bg-info text-dark"><i class="fas fa-globe fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
-                              {% endif %}
-                          </td>
-                          <td class="text-truncate" style="max-width: 300px;">{{ record.input_data }}</td>
-                          <td><span class="badge {% if record.risk=='High Risk' %}badge-high{% elif record.risk=='Medium Risk' %}badge-medium{% else %}badge-low{% endif %}">{{ record.risk }}</span></td>
-                          <td>{{ record.probability }}</td>
-                      </tr>
-                      {% else %}
-                      <tr><td colspan="5" class="text-center">You have no saved history yet.</td></tr>
-                      {% endfor %}
-                  </tbody>
-              </table>
-          </div>
       </div>
-  </div>
 </div>
 {% endblock %}
 
@@ -155,6 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
     {% if risk %} createDoughnutChart('probChart', '{{ probability }}'); parseAndDisplaySynopsis(); {% endif %}
     {% if ip_risk %} createDoughnutChart('ipProbChart', '{{ ip_score }}'); displaySecurityTip('ip', '{{ ip_risk }}'); {% endif %}
     {% if site_risk %} createDoughnutChart('siteProbChart', '{{ site_probability }}'); displaySecurityTip('site', '{{ site_risk }}'); {% endif %}
+    {% if sms_risk %} createDoughnutChart('smsProbChart', '{{ sms_probability }}'); {% endif %}
 });
 </script>
 {% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}My Analysis History - Scam Detector{% endblock %}
+
+{% block content %}
+<div class="card p-4 p-md-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h3>My Analysis History</h3>
+      <div>
+        <a href="{{ url_for('export_csv') }}" class="btn btn-outline-primary"><i class="fas fa-file-csv me-2"></i>Export to CSV</a>
+        <form action="{{ url_for('clear_history') }}" method="POST" class="d-inline">
+            <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Are you sure you want to permanently delete your entire history?');">
+                <i class="fas fa-trash-alt me-2"></i>Clear History
+            </button>
+        </form>
+      </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Input</th>
+                    <th>Risk</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in history_records %}
+                <tr>
+                    <td>{{ record.timestamp.strftime('%Y-%m-%d %H:%M') }} UTC</td>
+                    <td>
+                        {% if record.check_type == 'email' %}<span class="badge bg-primary"><i class="fas fa-envelope-open-text fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                        {% elif record.check_type == 'ip' %}<span class="badge bg-warning text-dark"><i class="fas fa-network-wired fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                        {% elif record.check_type == 'site' %}<span class="badge bg-info text-dark"><i class="fas fa-globe fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                        {% elif record.check_type == 'sms' %}<span class="badge" style="background-color: #5865F2; color: white;"><i class="fas fa-comment-dots fa-fw me-1"></i> {{ record.check_type|capitalize }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-truncate" style="max-width: 300px;">{{ record.input_data }}</td>
+                    <td>
+                      <span class="badge {% if record.risk=='High Risk' %}bg-danger{% elif record.risk=='Medium Risk' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ record.risk }}</span>
+                    </td>
+                    <td>{{ record.probability }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center">You have no saved history yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
