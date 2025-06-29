@@ -20,11 +20,11 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
 
-# ---- App & Extension Setup ----
+# ---- App & Extension Setups ----
 basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__, instance_relative_config=True)
 
-# Ensure the instance folder exists for the local database hello
+# Ensure the instance folder exists for the local database 
 try:
     os.makedirs(app.instance_path)
 except OSError:
