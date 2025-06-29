@@ -20,7 +20,7 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
 
-# ---- App & Extension Setups (test) ----
+# ---- App & Extension Setups ----
 basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__, instance_relative_config=True)
 
@@ -299,6 +299,7 @@ print("Loaded spaCy model, ML model, and domain lists.")
 
 # ===================================================================
 # ---- Main Application Routes ----
+#Hello
 # ===================================================================
 
 @app.route('/', methods=['GET','POST'])
