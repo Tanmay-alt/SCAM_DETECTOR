@@ -20,7 +20,7 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
 
-# ---- App & Extension Setups ----
+# ---- App & Extension Setups (test) ----
 basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__, instance_relative_config=True)
 
