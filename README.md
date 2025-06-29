@@ -2,9 +2,14 @@
 
 Scam Detector is a comprehensive, full-stack web application designed to empower users to identify and understand digital threats. It leverages a custom-trained machine learning model, multiple third-party APIs, and advanced data analysis tools to provide real-time risk analysis for emails, websites, IP addresses, and SMS messages. The platform is built with a secure, scalable, and modern technology stack, fully containerized with Docker for consistent development and deployment.
 
-**Live Demo:** [https://scam-detector-hne4.onrender.com](https://scam-detector-hne4.onrender.com) *(Note: Free tier instance may take 30-50 seconds to spin up on first visit)*
+Login Screen: ![Screenshot 2025-06-28 at 10 10 35 PM](https://github.com/user-attachments/assets/c2bc3959-f301-4eb0-9b24-6cbc9688a66f)
+Homepage: ![Screenshot 2025-06-28 at 10 10 24 PM](https://github.com/user-attachments/assets/43063cd9-feb5-4a61-8c6d-5244338d17ab)
+Threat Intelligence Dashboard: ![Screenshot 2025-06-28 at 10 11 30 PM](https://github.com/user-attachments/assets/fb8ff570-4b78-425b-8252-b066ccfd3fb0)
+AI Phishing Simulator: ![Screenshot 2025-06-28 at 10 11 43 PM](https://github.com/user-attachments/assets/2b43ed9a-b57a-41c2-bb68-79480143af5b)
+PII Data Scrubber: ![Screenshot 2025-06-28 at 10 11 53 PM](https://github.com/user-attachments/assets/6074d634-51d2-4e01-85af-0d1304033640)
 
-![Scam Detector UI](https://i.imgur.com/gK6nJ4G.png)
+
+
 
 ## Core Features
 
